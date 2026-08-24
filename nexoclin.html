@@ -289,6 +289,18 @@ audio.rc-media{width:230px;max-width:100%}
 .rc-tpl:hover{border-color:var(--role,var(--cyan))}
 .rc-tpl b{display:block;font-size:13px;color:var(--navy)}
 .rc-tpl span{display:block;font-size:12px;color:var(--mute);margin-top:2px}
+
+.pac-doc{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.pac-k{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:var(--mute)}
+.pac-t{font-family:var(--display);font-weight:800;font-size:17px;color:var(--navy);margin:2px 0 8px}
+.pac-c{white-space:pre-wrap;font-size:14px;color:#22343c;line-height:1.6}
+.pac-sig{margin-top:12px;color:var(--green);font-size:12.5px;font-weight:700}
+.pac-acts{display:flex;gap:8px;margin-top:12px}
+
+.prt-note{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:10px}
+.prt-h{display:flex;justify-content:space-between;font-size:11.5px;color:var(--mute);font-weight:600;margin-bottom:6px;gap:10px}
+.prt-c{white-space:pre-wrap;font-size:13.5px;color:#22343c;line-height:1.55}
+.prt-a{display:flex;gap:6px;margin-top:10px}
 </style>
 <style id="wa-style">
 /* ===== Cockpit de Atendimento WhatsApp — escopo .wa- ===== */
@@ -642,9 +654,9 @@ const ROLES={
 const USER={recepcao:'Marina Souza',secretaria:'Cláudia Reis',medico:'Dra. Camila Ferreira',gestor:'Roberto Caminha',admin:'Super-admin'};
 const NAV={
   recepcao:[['cockpit','Atendimento','chat'],['relatorios','Relatórios','chart']],
-  secretaria:[['cockpit','Atendimento','chat'],['agenda','Agenda','calendar'],['relatorios','Relatórios','chart']],
-  medico:[['cockpit','Atendimento','chat'],['relatorios','Meus indicadores','chart']],
-  gestor:[['cockpit','Atendimento','chat'],['agenda','Agenda','calendar'],['clinica','Minha clínica','building'],['relatorios','Relatórios','chart'],['equipe','Equipe','users']],
+  secretaria:[['cockpit','Atendimento','chat'],['agenda','Agenda','calendar'],['documentos','Documentos','inbox'],['relatorios','Relatórios','chart']],
+  medico:[['cockpit','Atendimento','chat'],['documentos','Documentos','inbox'],['relatorios','Meus indicadores','chart']],
+  gestor:[['cockpit','Atendimento','chat'],['agenda','Agenda','calendar'],['documentos','Documentos','inbox'],['clinica','Minha clínica','building'],['relatorios','Relatórios','chart'],['equipe','Equipe','users']],
   admin:[['plataforma','Plataforma','map'],['relatorios','Relatórios','chart'],['integr','Integrações','plug']],
 };
 const TITLES={cockpit:'Atendimento',agenda:'Agenda',clinica:'Minha clínica',plataforma:'Plataforma',relatorios:'Relatórios',integr:'Integrações',equipe:'Equipe & acessos'};
@@ -707,6 +719,8 @@ function nav(v){
   renderRoleBand();
   const view=document.getElementById('view');
   if(v==='cockpit'){ if(NX.real){ view.innerHTML=rcView(); rcLoad(); } else { WA.role=ROLE; view.innerHTML=WA.view(); WA.mount(); } }
+  else if(v==='documentos'){ if(NX.real){ view.innerHTML=documentosView(); docLoad(); } else { view.innerHTML=emptyState('Documentos','Entre com uma conta real (médico, secretaria ou gestor) para gerenciar documentos.'); } }
+  else if(v==='prontuario'){ if(NX.real){ prontuario(); } else { view.innerHTML=emptyState('Prontuário','Entre com uma conta real para acessar o prontuário.'); } }
   else if(v==='agenda'){ if(NX.real){ view.innerHTML=emptyState('Agenda','Nenhum agendamento ainda. A agenda é preenchida conforme os atendimentos avançam.'); } else { view.innerHTML=agendaView(); } }
   else if(v==='relatorios'){ if(NX.real){ view.innerHTML=emptyState('Relatórios','Ainda sem dados. Os indicadores aparecem conforme os atendimentos acontecem.'); } else { const sc=ROLE==='medico'?'medico':'admin'; view.innerHTML=WA.dash.view(sc); WA.dash.mount(sc); } }
   else if(v==='integr'){ view.innerHTML=WA.integr.view(); WA.integr.mount(); }
@@ -958,17 +972,22 @@ async function nxLogin(){
     enter(role);
   }catch(ex){ err.textContent='Erro: '+(ex.message||ex); }
 }
-function teamForm(i){
+async function teamForm(i){
+  await catLoad();
   const t=i>=0?TEAM[i]:{nome:'',email:'',role:'recepcao',status:'Ativo'};
   const pwd=(NX.real&&i<0)?`<div class="nxm-field"><label>Senha inicial</label><input id="tfPass" type="text" placeholder="mínimo 6 caracteres"></div>`:'';
+  const espSel=`<option value=""></option>`+CAT.specialties.map(sp=>`<option ${sp===(t.especialidade||'')?'selected':''}>${sp}</option>`).join('');
   openModal(`<h3>${i>=0?'Editar acesso':'Adicionar acesso'}</h3>
     <div class="nxm-field"><label>Nome</label><input id="tfNome" value="${t.nome}"></div>
     <div class="nxm-field"><label>E-mail</label><input id="tfEmail" type="email" value="${t.email}" ${i>=0?'disabled':''}></div>
-    <div class="nxm-field"><label>Perfil</label><select id="tfRole">${roleOptionsClinic(t.role)}</select></div>
+    <div class="nxm-field"><label>Perfil</label><select id="tfRole" onchange="tfRoleChange()">${roleOptionsClinic(t.role)}</select></div>
+    <div class="nxm-field" id="tfEspWrap" style="${t.role==='medico'?'':'display:none'}"><label>Especialidade</label><select id="tfEsp">${espSel}</select></div>
+    <div class="nxm-field" id="tfCrmWrap" style="${t.role==='medico'?'':'display:none'}"><label>CRM</label><input id="tfCrm" placeholder="CRM-UF 000000"></div>
     ${pwd}
     <div class="nxm-field"><label>Status</label><select id="tfStatus"><option ${t.status==='Ativo'?'selected':''}>Ativo</option><option ${t.status==='Inativo'?'selected':''}>Inativo</option></select></div>
     <div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button><button class="nxm-btn pri" onclick="teamSave(${i})">Salvar</button></div>`);
 }
+function tfRoleChange(){ const r=(document.getElementById('tfRole')||{}).value; const e=document.getElementById('tfEspWrap'); const c=document.getElementById('tfCrmWrap'); const sh=r==='medico'?'':'none'; if(e)e.style.display=sh; if(c)c.style.display=sh; }
 async function teamSave(i){
   const nome=(document.getElementById('tfNome').value||'').trim();
   const email=(document.getElementById('tfEmail').value||'').trim();
@@ -977,15 +996,19 @@ async function teamSave(i){
   if(!nome||!email){ toast('Preencha nome e e-mail','⚠'); return; }
   if(NX.real){
     try{
+      const esp=(document.getElementById('tfEsp')||{}).value||null; const crm=(document.getElementById('tfCrm')||{}).value||null;
       if(i>=0){
         await SB.rpc('nx_admin_update_user',{p_user_id:TEAM[i].user_id,p_nome:nome});
         await SB.rpc('nx_admin_set_member_role',{p_clinic:NX.clinic,p_user_id:TEAM[i].user_id,p_role:role});
+        if(role==='medico'){ await SB.rpc('nx_admin_set_professional',{p_user_id:TEAM[i].user_id,p_especialidade:esp,p_crm:crm}); }
         toast('Acesso atualizado');
       } else {
         const pass=(document.getElementById('tfPass').value||'').trim();
         if(pass.length<6){ toast('Senha inicial mínima de 6 caracteres','⚠'); return; }
-        const {error}=await SB.rpc('nx_admin_create_user',{p_clinic:NX.clinic,p_email:email,p_password:pass,p_nome:nome,p_role:role});
-        if(error) throw error; toast('Acesso criado');
+        const {data:uid,error}=await SB.rpc('nx_admin_create_user',{p_clinic:NX.clinic,p_email:email,p_password:pass,p_nome:nome,p_role:role});
+        if(error) throw error;
+        if(role==='medico'&&uid){ await SB.rpc('nx_admin_set_professional',{p_user_id:uid,p_especialidade:esp,p_crm:crm}); }
+        toast('Acesso criado');
       }
       closeModal(); teamLoad();
     }catch(e){ toast('Erro: '+(e.message||e),'⚠'); }
@@ -1104,13 +1127,17 @@ function clinicUsersView(){
     <table class="eq-tbl"><thead><tr><th>Pessoa</th><th>Perfil</th><th>E-mail</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead><tbody id="mcuBody">${mcuRows()}</tbody></table>
   </div>`;
 }
-function mcuForm(i){
+async function mcuForm(i){
+  await catLoad();
   const t=i>=0?MCU.users[i]:{nome:'',email:'',role:(MCU.users.length?'recepcao':'gestor')};
   const pwd=(i<0)?`<div class="nxm-field"><label>Senha inicial</label><input id="tfPass" type="text" placeholder="mínimo 6 caracteres"></div>`:'';
+  const espSel=`<option value=""></option>`+CAT.specialties.map(sp=>`<option ${sp===(t.especialidade||'')?'selected':''}>${sp}</option>`).join('');
   openModal(`<h3>${i>=0?'Editar usuário':'Adicionar usuário'}${(i<0&&!MCU.users.length)?' (administrador)':''}</h3>
     <div class="nxm-field"><label>Nome</label><input id="tfNome" value="${t.nome||''}"></div>
     <div class="nxm-field"><label>E-mail</label><input id="tfEmail" type="email" value="${t.email||''}" ${i>=0?'disabled':''}></div>
-    <div class="nxm-field"><label>Perfil</label><select id="tfRole">${roleOptionsClinic(t.role)}</select></div>
+    <div class="nxm-field"><label>Perfil</label><select id="tfRole" onchange="tfRoleChange()">${roleOptionsClinic(t.role)}</select></div>
+    <div class="nxm-field" id="tfEspWrap" style="${t.role==='medico'?'':'display:none'}"><label>Especialidade</label><select id="tfEsp">${espSel}</select></div>
+    <div class="nxm-field" id="tfCrmWrap" style="${t.role==='medico'?'':'display:none'}"><label>CRM</label><input id="tfCrm" placeholder="CRM-UF 000000"></div>
     ${pwd}
     <div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button><button class="nxm-btn pri" onclick="mcuSave(${i})">Salvar</button></div>`);
 }
@@ -1120,9 +1147,10 @@ async function mcuSave(i){
   const role=document.getElementById('tfRole').value;
   if(!nome||!email){ toast('Preencha nome e e-mail','⚠'); return; }
   try{
-    if(i>=0){ await SB.rpc('nx_admin_update_user',{p_user_id:MCU.users[i].user_id,p_nome:nome}); await SB.rpc('nx_admin_set_member_role',{p_clinic:MCU.clinic,p_user_id:MCU.users[i].user_id,p_role:role}); toast('Usuário atualizado'); }
+    const esp=(document.getElementById('tfEsp')||{}).value||null; const crm=(document.getElementById('tfCrm')||{}).value||null;
+    if(i>=0){ await SB.rpc('nx_admin_update_user',{p_user_id:MCU.users[i].user_id,p_nome:nome}); await SB.rpc('nx_admin_set_member_role',{p_clinic:MCU.clinic,p_user_id:MCU.users[i].user_id,p_role:role}); if(role==='medico'){ await SB.rpc('nx_admin_set_professional',{p_user_id:MCU.users[i].user_id,p_especialidade:esp,p_crm:crm}); } toast('Usuário atualizado'); }
     else { const pass=(document.getElementById('tfPass').value||'').trim(); if(pass.length<6){ toast('Senha inicial mínima de 6 caracteres','⚠'); return; }
-      const {error}=await SB.rpc('nx_admin_create_user',{p_clinic:MCU.clinic,p_email:email,p_password:pass,p_nome:nome,p_role:role}); if(error) throw error; toast('Usuário criado'); }
+      const {data:uid,error}=await SB.rpc('nx_admin_create_user',{p_clinic:MCU.clinic,p_email:email,p_password:pass,p_nome:nome,p_role:role}); if(error) throw error; if(role==='medico'&&uid){ await SB.rpc('nx_admin_set_professional',{p_user_id:uid,p_especialidade:esp,p_crm:crm}); } toast('Usuário criado'); }
     closeModal(); mcuLoad();
   }catch(e){ toast('Erro: '+(e.message||e),'⚠'); }
 }
@@ -1349,7 +1377,145 @@ async function rcTriageSave(){ const g=id=>((document.getElementById(id)||{}).va
 const DESFECHOS=[['Atendimento concluído','finalizada'],['Encaminhado','resolvida'],['Paciente não retornou','resolvida'],['Paciente foi embora','resolvida'],['Cancelado','resolvida']];
 function rcFinishForm(){ openModal(`<h3>Encerrar atendimento</h3><p style="color:var(--mute);font-size:12.5px;margin:2px 0 10px">Escolha o desfecho:</p>${DESFECHOS.map(dd=>`<button class="rc-b2" style="width:100%;margin-bottom:8px;text-align:left" onclick="rcFinishSave('${dd[0]}','${dd[1]}')">${dd[0]}</button>`).join('')}<div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button></div>`); }
 async function rcFinishSave(desf,status){ try{ await SB.rpc('nx_conv_finish',{p_conv:RC.activeId,p_desfecho:desf,p_status:status}); closeModal(); await rcLoad(); await rcOpen(RC.activeId); toast('Encerrado: '+desf); }catch(e){ toast('Erro: '+(e.message||e),'⚠'); } }
-function rcDocsSoon(){ toast('Receita, atestado, exame e prontuário com assinatura digital fazem parte do Plano Super — liberado para testes em breve','📄'); }
+function rcDocsSoon(){ nav('documentos'); }
+const DKIND={receita:'Receita',atestado:'Atestado',exame:'Solicitação de exame',prontuario:'Prontuário',resumo:'Resumo',encaminhamento:'Encaminhamento',outro:'Outro'};
+const DTPL={
+ receita:'Uso conforme orientação:\n\n• \n• \n\nOrientações: ',
+ atestado:'Atesto, para os devidos fins, que o(a) paciente necessita de afastamento de suas atividades por ___ dia(s), a partir de ___/___/____, por motivo de saúde. CID: ___.',
+ exame:'Solicito os seguintes exames:\n\n- \n- \n\nIndicação clínica: ',
+ prontuario:'Queixa principal:\n\nHistória da doença atual:\n\nExame físico:\n\nHipótese diagnóstica:\n\nConduta:',
+ outro:''
+};
+const MEDS=['Dipirona 500mg','Paracetamol 750mg','Ibuprofeno 600mg','Amoxicilina 500mg','Amoxicilina+Clavulanato 875mg','Azitromicina 500mg','Cefalexina 500mg','Omeprazol 20mg','Losartana 50mg','Metformina 850mg','Dexametasona 4mg','Prednisona 20mg','Nimesulida 100mg','Loratadina 10mg','Salbutamol spray','Ondansetrona 8mg','Amoxicilina 250mg/5ml suspensão'];
+const DOC={clinic:null,list:[],patients:[],editId:null};
+function documentosView(){
+  return `<div class="wi" style="max-width:none">
+    <div class="page-h"><h1>Documentos <span class="rc-super">Plano Super</span></h1><p>Receita, atestado, solicitação de exame e prontuário. Secretaria e médico criam e editam; o médico assina digitalmente; o paciente acessa por link para ver, imprimir e exportar.</p></div>
+    <div class="eq-bar"><b>Documentos</b><div style="display:flex;gap:8px"><button class="rc-b2" onclick="nav('prontuario')">Prontuário</button><button class="cl-btn pri" style="margin:0;padding:10px 15px" onclick="docForm(null)">+ Novo documento</button></div></div>
+    <table class="eq-tbl"><thead><tr><th>Título</th><th>Tipo</th><th>Paciente</th><th>Status</th><th style="text-align:right">Ações</th></tr></thead><tbody id="docBody"><tr><td colspan="5" style="color:var(--mute)">Carregando…</td></tr></tbody></table>
+  </div>`;
+}
+async function docLoad(){
+  DOC.clinic=NX.clinic; if(!SB||!DOC.clinic) return;
+  try{ await SB.auth.getSession();
+    const [dl,pl]=await Promise.all([SB.rpc('nx_doc_list',{p_clinic:DOC.clinic,p_patient:null}),SB.rpc('nx_patients_list',{p_clinic:DOC.clinic})]);
+    DOC.list=dl.data||[]; DOC.patients=pl.data||[];
+    const b=document.getElementById('docBody'); if(b) b.innerHTML=docRows();
+  }catch(e){ const b=document.getElementById('docBody'); if(b) b.innerHTML='<tr><td colspan="5" style="color:var(--coral)">Erro ao carregar.</td></tr>'; }
+}
+function docRows(){
+  if(!DOC.list.length) return '<tr><td colspan="5" style="color:var(--mute)">Nenhum documento ainda. Clique em “+ Novo documento”.</td></tr>';
+  const medico=['medico','gestor','admin'].includes(ROLE);
+  return DOC.list.map(d=>`<tr><td><b>${d.titulo||'—'}</b></td><td><span class="eq-badge">${DKIND[d.kind]||d.kind}</span></td><td style="color:var(--mute)">${d.paciente||'—'}</td><td style="font-weight:600;color:${d.signed?'var(--green)':'var(--sun,#B4790B)'}">${d.signed?'Assinado':'Rascunho'}</td>
+    <td style="text-align:right;white-space:nowrap"><button class="eq-act" onclick="docForm('${d.id}')">Editar</button>${medico&&!d.signed?`<button class="eq-act" onclick="docSign('${d.id}')">Assinar</button>`:''}<button class="eq-act" onclick="docPrint('${d.id}')">Imprimir</button><button class="eq-act" onclick="docExport('${d.id}')">Exportar</button>${d.patient_id?`<button class="eq-act" onclick="docShare('${d.patient_id}')">Link paciente</button>`:''}<button class="eq-act danger" onclick="docDelete('${d.id}','${(d.titulo||'').replace(/'/g,'')}')">Excluir</button></td></tr>`).join('');
+}
+async function docForm(id){
+  await catLoad();
+  DOC.editId=id; let d={kind:'receita',titulo:'',conteudo:'',patient_id:''};
+  if(id){ try{ const {data}=await SB.rpc('nx_doc_get',{p_doc:id}); if(data) d=data; }catch(e){} }
+  const patOpts=`<option value="">— selecione —</option>`+DOC.patients.map(p=>`<option value="${p.id}" ${d.patient_id===p.id?'selected':''}>${p.nome}</option>`).join('')+`<option value="__new">+ Novo paciente…</option>`;
+  openModal(`<h3>${id?'Editar documento':'Novo documento'}</h3>
+    <div class="cl-2"><div class="nxm-field"><label>Tipo</label><select id="dfKind" onchange="docKindChange()">${Object.keys(DTPL).map(k=>`<option value="${k}" ${d.kind===k?'selected':''}>${DKIND[k]}</option>`).join('')}</select></div>
+    <div class="nxm-field"><label>Paciente</label><select id="dfPat" ${id?'disabled':''} onchange="docPatChange()">${patOpts}</select></div></div>
+    <div class="nxm-field"><label>Título</label><input id="dfTit" value="${d.titulo||''}" placeholder="Ex.: Receita médica"></div>
+    <div class="nxm-field" id="catWrap" style="display:none"><label id="catLabel">Catálogo</label><div style="display:flex;gap:8px"><input list="catList" id="dfCat" placeholder="digite para buscar" style="flex:1"><button class="rc-b2" onclick="docAddCat()">Adicionar</button></div><datalist id="catList"></datalist></div>
+    <div class="nxm-field"><label>Conteúdo</label><textarea id="dfCont" rows="8" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:var(--body);font-size:13px;outline:none">${d.conteudo||''}</textarea></div>
+    <div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button><button class="nxm-btn pri" onclick="docSave()">Salvar</button></div>`);
+  docKindChange();
+}
+function docCatConfig(k){ if(k==='receita') return {label:'Medicamento',list:CAT.meds.map(m=>m.nome),mode:'med'}; if(k==='exame') return {label:'Exame',list:CAT.exams.map(x=>x.nome),mode:'exam'}; if(k==='atestado'||k==='prontuario') return {label:'CID',list:CAT.cid.map(c=>c.codigo+' — '+c.descricao),mode:'cid'}; return null; }
+function docKindChange(){ const k=document.getElementById('dfKind').value; const cont=document.getElementById('dfCont'); if(cont&&!cont.value.trim()) cont.value=DTPL[k]||''; const t=document.getElementById('dfTit'); if(t&&!t.value.trim()) t.value=DKIND[k];
+  const cfg=docCatConfig(k); const wrap=document.getElementById('catWrap'); if(!wrap)return;
+  if(cfg){ wrap.style.display=''; const lab=document.getElementById('catLabel'); if(lab)lab.textContent=cfg.label+' (autocompletar)'; const dl=document.getElementById('catList'); if(dl) dl.innerHTML=cfg.list.map(x=>`<option value="${(x+'').replace(/"/g,'&quot;')}">`).join(''); const inp=document.getElementById('dfCat'); if(inp) inp.placeholder='buscar em '+cfg.list.length+' itens'; }
+  else wrap.style.display='none';
+}
+function docAddCat(){ const k=document.getElementById('dfKind').value; const cfg=docCatConfig(k); const inp=document.getElementById('dfCat'); const cont=document.getElementById('dfCont'); if(!cfg||!inp||!cont||!inp.value)return; let line = cfg.mode==='med'?('• '+inp.value+' — '):cfg.mode==='exam'?('- '+inp.value):('CID: '+inp.value); cont.value+=((cont.value&&!cont.value.endsWith('\n'))?'\n':'')+line; inp.value=''; cont.focus(); }
+async function docPatChange(){ const sel=document.getElementById('dfPat'); if(sel.value==='__new'){ const nome=prompt('Nome do novo paciente:'); if(nome){ try{ const {data:pid}=await SB.rpc('nx_patient_create',{p_clinic:DOC.clinic,p_nome:nome,p_cpf:null,p_telefone:null}); const pl=await SB.rpc('nx_patients_list',{p_clinic:DOC.clinic}); DOC.patients=pl.data||[]; const opts=`<option value="">— selecione —</option>`+DOC.patients.map(p=>`<option value="${p.id}" ${p.id===pid?'selected':''}>${p.nome}</option>`).join('')+`<option value="__new">+ Novo paciente…</option>`; sel.innerHTML=opts; }catch(e){ toast('Erro ao criar paciente','⚠'); sel.value=''; } } else sel.value=''; } }
+function docAddMed(){ const m=document.getElementById('dfMed'); const cont=document.getElementById('dfCont'); if(m&&m.value&&cont){ cont.value+=((cont.value&&!cont.value.endsWith('\n'))?'\n':'')+'• '+m.value+' — '; m.value=''; cont.focus(); } }
+async function docSave(){
+  const kind=document.getElementById('dfKind').value; const patSel=document.getElementById('dfPat'); const pat=patSel?patSel.value:''; const tit=(document.getElementById('dfTit').value||'').trim(); const cont=document.getElementById('dfCont').value||'';
+  if(!tit){ toast('Informe o título','⚠'); return; }
+  const patient=(pat&&pat!=='__new')?pat:null;
+  try{
+    if(DOC.editId){ await SB.rpc('nx_doc_update',{p_doc:DOC.editId,p_titulo:tit,p_conteudo:cont}); toast('Documento atualizado'); }
+    else { const {error}=await SB.rpc('nx_doc_create',{p_clinic:DOC.clinic,p_patient:patient,p_conv:null,p_kind:kind,p_titulo:tit,p_conteudo:cont}); if(error) throw error; toast('Documento criado'); }
+    closeModal(); docLoad();
+  }catch(e){ toast('Erro: '+(e.message||e),'⚠'); }
+}
+async function docSign(id){ try{ const {error}=await SB.rpc('nx_doc_sign',{p_doc:id}); if(error) throw error; docLoad(); toast('Assinado digitalmente ✔'); }catch(e){ toast('Erro: '+(e.message||e),'⚠'); } }
+function docDelete(id,tit){ openModal(`<h3>Excluir documento</h3><p style="color:var(--mute);font-size:14px;margin:8px 0 0">Excluir <b>${tit}</b>? Esta ação não pode ser desfeita.</p><div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button><button class="nxm-btn danger" onclick="docDoDelete('${id}')">Excluir</button></div>`); }
+async function docDoDelete(id){ try{ await SB.rpc('nx_doc_delete',{p_doc:id}); closeModal(); docLoad(); toast('Documento excluído'); }catch(e){ toast('Erro','⚠'); } }
+async function docShare(patientId){ try{ const {data:tok,error}=await SB.rpc('nx_patient_share',{p_patient:patientId}); if(error) throw error; const url=location.origin+location.pathname+'?paciente='+tok; openModal(`<h3>Link do paciente</h3><p style="color:var(--mute);font-size:13px;margin:6px 0 12px">O paciente acessa por aqui para ver, imprimir e exportar os documentos <b>assinados</b>.</p><div class="cl-inp"><code>${url}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div><div class="nxm-actions"><button class="nxm-btn pri" onclick="closeModal()">Pronto</button></div>`); }catch(e){ toast('Erro: '+(e.message||e),'⚠'); } }
+function docPrintHTML(d){
+  const sig = d.signed?`<div class="sig ok">✔ Assinado digitalmente pelo médico — ${d.signature_ref||''}</div>`:`<div class="sig no">Documento não assinado</div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${d.titulo||'Documento'}</title><style>body{font-family:Georgia,'Times New Roman',serif;max-width:720px;margin:40px auto;color:#15242c;line-height:1.6;padding:0 24px}.kind{color:#6b7b83;text-transform:uppercase;font-size:11px;letter-spacing:2px}h1{font-size:22px;margin:4px 0 18px}.content{white-space:pre-wrap;font-size:15px}.sig{margin-top:44px;padding-top:12px;border-top:1px solid #d5dde1;font-size:13px}.sig.ok{color:#12996a}.sig.no{color:#c0392b}.pac{margin-top:8px;color:#8a99a0;font-size:12px}</style></head><body><div class="kind">${DKIND[d.kind]||d.kind}</div><h1>${d.titulo||''}</h1><div class="content">${(d.conteudo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>${sig}<div class="pac">Paciente: ${d.paciente||'—'}</div></body></html>`;
+}
+function docOpenPrint(d){ const w=window.open('','_blank'); if(!w){ toast('Permita pop-ups para imprimir','⚠'); return; } w.document.write(docPrintHTML(d)); w.document.close(); w.focus(); setTimeout(()=>{try{w.print();}catch(e){}},350); }
+function docDownload(d){ const blob=new Blob([docPrintHTML(d)],{type:'text/html;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=((d.titulo||'documento').replace(/[^\w -]/g,'')||'documento')+'.html'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
+async function docPrint(id){ try{ const {data:d}=await SB.rpc('nx_doc_get',{p_doc:id}); if(d) docOpenPrint(d); }catch(e){ toast('Erro','⚠'); } }
+async function docExport(id){ try{ const {data:d}=await SB.rpc('nx_doc_get',{p_doc:id}); if(d) docDownload(d); }catch(e){ toast('Erro','⚠'); } }
+function nxCheckPaciente(){
+  const tok=new URLSearchParams(location.search).get('paciente'); if(!tok) return;
+  const ov=document.createElement('div'); ov.id='pacOverlay'; ov.style.cssText='position:fixed;inset:0;background:#F4F7F9;overflow:auto;z-index:99999;padding:24px';
+  ov.innerHTML='<div id="pacPage" style="max-width:760px;margin:0 auto;color:#6b7b83;text-align:center;margin-top:40px">Carregando…</div>'; document.body.appendChild(ov);
+  if(!SB){ document.getElementById('pacPage').innerHTML='Conexão indisponível.'; return; }
+  pacLoad(tok);
+}
+async function pacLoad(tok){
+  const el=document.getElementById('pacPage');
+  try{ const {data}=await SB.rpc('nx_patient_docs_public',{p_token:tok});
+    if(!data||!data.ok){ el.innerHTML='<div style="color:#c0392b;margin-top:40px">Link inválido ou expirado.</div>'; return; }
+    window.__pac={docs:data.docs||[],paciente:data.paciente};
+    el.style.textAlign='left'; el.style.color='inherit';
+    el.innerHTML=`<div style="text-align:center;margin-bottom:20px"><div style="font-family:var(--display,sans-serif);font-weight:800;font-size:22px;color:#143A4E">${data.clinica}</div><div style="color:#6b7b83">Documentos de <b>${data.paciente}</b></div></div>
+      ${(data.docs&&data.docs.length)?data.docs.map((d,i)=>`<div class="pac-doc"><div class="pac-k">${DKIND[d.kind]||d.kind}</div><div class="pac-t">${d.titulo||''}</div><div class="pac-c">${(d.conteudo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="pac-sig">✔ Assinado pelo médico</div><div class="pac-acts"><button class="cl-btn pri" style="margin:0" onclick="pacPrint(${i})">Imprimir</button><button class="rc-b2" onclick="pacExport(${i})">Exportar</button></div></div>`).join(''):'<div style="text-align:center;color:#6b7b83;margin-top:40px">Nenhum documento assinado disponível ainda.</div>'}`;
+  }catch(e){ el.innerHTML='<div style="color:#c0392b;margin-top:40px">Erro ao carregar.</div>'; }
+}
+function pacPrint(i){ const d=Object.assign({signed:true,paciente:window.__pac.paciente},window.__pac.docs[i]); docOpenPrint(d); }
+function pacExport(i){ const d=Object.assign({signed:true,paciente:window.__pac.paciente},window.__pac.docs[i]); docDownload(d); }
+const CAT={meds:[],cid:[],exams:[],specialties:[],loaded:false};
+async function catLoad(force){
+  if(!SB){ return; } if(CAT.loaded&&!force) return;
+  try{ const calls=[SB.rpc('nx_cid_all'),SB.rpc('nx_specialties')]; if(NX.clinic){ calls.push(SB.rpc('nx_med_all',{p_clinic:NX.clinic}),SB.rpc('nx_exam_all',{p_clinic:NX.clinic})); }
+    const r=await Promise.all(calls); CAT.cid=r[0].data||[]; CAT.specialties=(r[1].data||[]).map(x=>x.nome); if(NX.clinic){ CAT.meds=r[2].data||[]; CAT.exams=r[3].data||[]; } CAT.loaded=true;
+  }catch(e){}
+}
+const PRT={patient:null,name:'',notes:[]};
+async function prontuario(){
+  DOC.clinic=NX.clinic;
+  try{ const pl=await SB.rpc('nx_patients_list',{p_clinic:DOC.clinic}); DOC.patients=pl.data||[]; }catch(e){}
+  await catLoad();
+  document.getElementById('view').innerHTML=prontuarioView();
+  if(PRT.patient) prtLoad();
+}
+function prontuarioView(){
+  const patOpts=`<option value="">— selecione o paciente —</option>`+DOC.patients.map(p=>`<option value="${p.id}" ${PRT.patient===p.id?'selected':''}>${p.nome}</option>`).join('');
+  return `<div class="wi" style="max-width:none">
+    <div style="margin-bottom:10px"><button class="eq-act" onclick="nav('documentos')">← Voltar aos documentos</button></div>
+    <div class="page-h"><h1>Prontuário <span class="rc-super">Plano Super</span></h1><p>Notas clínicas do paciente com CID. Adicione, edite e exclua. Histórico por autor e data.</p></div>
+    <div class="nxm-field" style="max-width:440px"><label>Paciente</label><select id="prtPat" onchange="prtSelect(this.value)">${patOpts}</select></div>
+    <div id="prtBox">${PRT.patient?'<div class="rc-empty">Carregando…</div>':'<div class="rc-empty">Selecione um paciente para ver o prontuário.</div>'}</div>
+  </div>`;
+}
+function prtSelect(pid){ PRT.patient=pid; PRT.name=(DOC.patients.find(p=>p.id===pid)||{}).nome||''; if(pid) prtLoad(); else document.getElementById('prtBox').innerHTML='<div class="rc-empty">Selecione um paciente.</div>'; }
+async function prtLoad(){ if(!PRT.patient) return; try{ const {data}=await SB.rpc('nx_pront_list',{p_patient:PRT.patient}); PRT.notes=data||[]; renderPrt(); }catch(e){ const b=document.getElementById('prtBox'); if(b)b.innerHTML='<div class="rc-empty" style="color:var(--coral)">Erro ao carregar.</div>'; } }
+function renderPrt(){ const b=document.getElementById('prtBox'); if(!b) return;
+  b.innerHTML=`<button class="cl-btn pri" style="margin:4px 0 14px" onclick="prtForm(null)">+ Nova nota</button>
+    ${PRT.notes.length?PRT.notes.map(n=>`<div class="prt-note"><div class="prt-h"><span>${n.autor_nome||'—'} · ${new Date(n.created_at).toLocaleString('pt-BR')}${(n.updated_at&&n.updated_at!==n.created_at)?' (editada)':''}</span><span>${n.cid?('CID '+n.cid):''}</span></div><div class="prt-c">${(n.nota||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="prt-a"><button class="eq-act" onclick="prtForm('${n.id}')">Editar</button><button class="eq-act danger" onclick="prtDelete('${n.id}')">Excluir</button></div></div>`).join(''):'<div class="rc-empty">Nenhuma nota ainda.</div>'}`;
+}
+function prtForm(id){ const n=id?PRT.notes.find(x=>x.id===id):{cid:'',nota:''};
+  const cidList=`<datalist id="cidList">${CAT.cid.map(c=>`<option value="${c.codigo}">${c.codigo} — ${c.descricao}</option>`).join('')}</datalist>`;
+  openModal(`<h3>${id?'Editar nota':'Nova nota'}</h3>
+    <div class="nxm-field"><label>CID (opcional)</label><input id="prtCid" list="cidList" value="${n.cid||''}" placeholder="ex.: J06.9">${cidList}</div>
+    <div class="nxm-field"><label>Nota clínica</label><textarea id="prtNota" rows="6" style="width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:var(--body);font-size:13px;outline:none">${n.nota||''}</textarea></div>
+    <div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button><button class="nxm-btn pri" onclick="prtSave('${id||''}')">Salvar</button></div>`);
+}
+async function prtSave(id){ const cid=(document.getElementById('prtCid').value||'').trim(); const nota=(document.getElementById('prtNota').value||'').trim();
+  if(!nota){ toast('Escreva a nota','⚠'); return; }
+  try{ if(id){ await SB.rpc('nx_pront_update',{p_note:id,p_cid:cid,p_nota:nota}); } else { await SB.rpc('nx_pront_add',{p_clinic:DOC.clinic,p_patient:PRT.patient,p_conv:null,p_cid:cid,p_nota:nota}); } closeModal(); prtLoad(); toast('Nota salva'); }catch(e){ toast('Erro: '+(e.message||e),'⚠'); }
+}
+function prtDelete(id){ openModal(`<h3>Excluir nota</h3><p style="color:var(--mute);font-size:14px;margin:8px 0 0">Excluir esta nota do prontuário? Não pode ser desfeito.</p><div class="nxm-actions"><button class="nxm-btn ghost" onclick="closeModal()">Cancelar</button><button class="nxm-btn danger" onclick="prtDoDelete('${id}')">Excluir</button></div>`); }
+async function prtDoDelete(id){ try{ await SB.rpc('nx_pront_delete',{p_note:id}); closeModal(); prtLoad(); toast('Nota excluída'); }catch(e){ toast('Erro','⚠'); } }
 function nxCheckOnboard(){
   const tok=new URLSearchParams(location.search).get('onboard'); if(!tok) return;
   const card=document.querySelector('#login .login-card'); if(!card) return;
@@ -1427,6 +1593,7 @@ async function nxRestoreSession(){
 nxCheckOnboard();
 nxRestoreSession();
 nxCheckSlug();
+nxCheckPaciente();
 </script>
 <script id="wa-script">
 (function(){
