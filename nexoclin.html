@@ -1369,6 +1369,7 @@ async function rcTriageSave(){ const g=id=>((document.getElementById(id)||{}).va
   const tipo=g('tgTipo'); const pac=g('tgPac'); const resp=tipo==='adulto'?pac:g('tgResp');
   if(!pac){ toast('Informe o nome do paciente','⚠'); return; }
   try{ await SB.rpc('nx_conv_update',{p_conv:RC.activeId,p_paciente:pac,p_responsavel:resp,p_telefone:g('tgTel'),p_bairro:g('tgBairro'),p_estado:g('tgUf')});
+    try{ await SB.rpc('nx_conv_link_patient',{p_conv:RC.activeId,p_nome:pac,p_cpf:g('tgCpf'),p_telefone:g('tgTel')}); }catch(_e){}
     const extra=[['Nascimento',g('tgNasc')],['CPF',g('tgCpf')],['CEP',g('tgCep')],['Endereço',[g('tgEnd'),g('tgCidade')].filter(Boolean).join(', ')]];
     for(const kv of extra){ if(kv[1]) await SB.rpc('nx_conv_collect',{p_conv:RC.activeId,p_chave:kv[0],p_valor:kv[1],p_atencao:false}); }
     closeModal(); await rcOpen(RC.activeId); toast('Triagem salva'); }
@@ -1411,6 +1412,8 @@ function docRows(){
 }
 async function docForm(id){
   await catLoad();
+  DOC.clinic=NX.clinic;
+  try{ const pl=await SB.rpc('nx_patients_list',{p_clinic:DOC.clinic}); DOC.patients=pl.data||[]; }catch(e){}
   DOC.editId=id; let d={kind:'receita',titulo:'',conteudo:'',patient_id:''};
   if(id){ try{ const {data}=await SB.rpc('nx_doc_get',{p_doc:id}); if(data) d=data; }catch(e){} }
   const patOpts=`<option value="">— selecione —</option>`+DOC.patients.map(p=>`<option value="${p.id}" ${d.patient_id===p.id?'selected':''}>${p.nome}</option>`).join('')+`<option value="__new">+ Novo paciente…</option>`;
@@ -1447,8 +1450,48 @@ function docDelete(id,tit){ openModal(`<h3>Excluir documento</h3><p style="color
 async function docDoDelete(id){ try{ await SB.rpc('nx_doc_delete',{p_doc:id}); closeModal(); docLoad(); toast('Documento excluído'); }catch(e){ toast('Erro','⚠'); } }
 async function docShare(patientId){ try{ const {data:tok,error}=await SB.rpc('nx_patient_share',{p_patient:patientId}); if(error) throw error; const url=location.origin+location.pathname+'?paciente='+tok; openModal(`<h3>Link do paciente</h3><p style="color:var(--mute);font-size:13px;margin:6px 0 12px">O paciente acessa por aqui para ver, imprimir e exportar os documentos <b>assinados</b>.</p><div class="cl-inp"><code>${url}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div><div class="nxm-actions"><button class="nxm-btn pri" onclick="closeModal()">Pronto</button></div>`); }catch(e){ toast('Erro: '+(e.message||e),'⚠'); } }
 function docPrintHTML(d){
-  const sig = d.signed?`<div class="sig ok">✔ Assinado digitalmente pelo médico — ${d.signature_ref||''}</div>`:`<div class="sig no">Documento não assinado</div>`;
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${d.titulo||'Documento'}</title><style>body{font-family:Georgia,'Times New Roman',serif;max-width:720px;margin:40px auto;color:#15242c;line-height:1.6;padding:0 24px}.kind{color:#6b7b83;text-transform:uppercase;font-size:11px;letter-spacing:2px}h1{font-size:22px;margin:4px 0 18px}.content{white-space:pre-wrap;font-size:15px}.sig{margin-top:44px;padding-top:12px;border-top:1px solid #d5dde1;font-size:13px}.sig.ok{color:#12996a}.sig.no{color:#c0392b}.pac{margin-top:8px;color:#8a99a0;font-size:12px}</style></head><body><div class="kind">${DKIND[d.kind]||d.kind}</div><h1>${d.titulo||''}</h1><div class="content">${(d.conteudo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>${sig}<div class="pac">Paciente: ${d.paciente||'—'}</div></body></html>`;
+  const esc=(t)=>(t==null?'':(''+t)).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+  const c=d.clinica||{}; const p=(d.paciente&&typeof d.paciente==='object')?d.paciente:{}; const prof=d.assinante||d.autor||{};
+  const dt=d.created_at?new Date(d.created_at):new Date();
+  let dataFmt; try{ dataFmt=dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}); }catch(e){ dataFmt=''; }
+  const local=[c.cidade,c.estado].filter(Boolean).join('/');
+  const cabec=[esc(c.endereco),esc(local),c.telefone?('Tel/WhatsApp: '+esc(c.telefone)):'',c.cnpj?('CNPJ: '+esc(c.cnpj)):''].filter(Boolean).join(' · ');
+  const pac=[p.nome?('<b>'+esc(p.nome)+'</b>'):'',p.cpf?('CPF: '+esc(p.cpf)):'',p.nascimento?('Nasc.: '+esc(p.nascimento)):''].filter(Boolean).join(' — ');
+  const espcrm=[esc(prof.especialidade),esc(prof.crm)].filter(Boolean).join(' · ');
+  const sigBlock=`<div class="assinatura"><div class="linha"></div><div class="prof">${esc(prof.nome)||'&nbsp;'}</div>${espcrm?`<div class="crm">${espcrm}</div>`:''}${d.signed?`<div class="valida">✔ Assinado digitalmente pelo médico — validação ${esc(d.signature_ref)}</div>`:`<div class="naoass">Assinatura do profissional</div>`}</div>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.titulo)||'Documento'} — ${esc(c.nome)||'NexoClin'}</title>
+  <style>
+   :root{--navy:#143A4E;--cyan:#29A9D0;--ink:#22343c;--mute:#6b7b83}
+   *{box-sizing:border-box}
+   body{font-family:'Segoe UI',Helvetica,Arial,sans-serif;color:var(--ink);margin:0;background:#fff}
+   .page{max-width:760px;margin:0 auto;padding:46px 54px}
+   .top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid var(--cyan);padding-bottom:16px}
+   .cl-nome{font-size:22px;font-weight:800;color:var(--navy);letter-spacing:-.3px}
+   .cl-sub{font-size:11px;color:var(--mute);margin-top:5px;max-width:430px;line-height:1.6}
+   .doc-meta{text-align:right;font-size:11px;color:var(--mute);white-space:nowrap}
+   .doc-tipo{font-size:12px;font-weight:800;color:var(--cyan);letter-spacing:2px;text-transform:uppercase}
+   .doc-num{margin-top:3px}
+   .paciente{margin:22px 0 4px;font-size:13px;background:#F4F7F9;border-radius:8px;padding:11px 14px}
+   h1{font-size:20px;color:var(--navy);margin:20px 0 12px}
+   .content{white-space:pre-wrap;font-size:14.5px;line-height:1.75;min-height:120px}
+   .assinatura{margin-top:64px;text-align:center}
+   .assinatura .linha{width:300px;border-top:1px solid #333;margin:0 auto 7px}
+   .prof{font-weight:700;color:var(--navy)}
+   .crm{font-size:12px;color:var(--mute);margin-top:1px}
+   .valida{margin-top:9px;font-size:11px;color:#12996a}
+   .naoass{font-size:11px;color:var(--mute);margin-top:3px}
+   .rodape{margin-top:44px;border-top:1px solid #e8eced;padding-top:10px;font-size:10px;color:#9aa8ad;text-align:center;line-height:1.6}
+   @media print{.page{padding:20px 24px}}
+  </style></head>
+  <body><div class="page">
+   <div class="top"><div><div class="cl-nome">${esc(c.nome)||'Clínica'}</div>${cabec?`<div class="cl-sub">${cabec}</div>`:''}</div>
+     <div class="doc-meta"><div class="doc-tipo">${DKIND[d.kind]||d.kind}</div><div class="doc-num">Nº ${esc(d.numero)}</div><div>${dataFmt}</div></div></div>
+   ${pac?`<div class="paciente">Paciente: ${pac}</div>`:''}
+   <h1>${esc(d.titulo)}</h1>
+   <div class="content">${esc(d.conteudo)}</div>
+   ${sigBlock}
+   <div class="rodape">${local?esc(local)+' · ':''}${dataFmt} · Emitido por ${esc(c.nome)||'clínica'} via NexoClin${(d.signed&&d.signature_ref)?(' · validação '+esc(d.signature_ref)):''}</div>
+  </div></body></html>`;
 }
 function docOpenPrint(d){ const w=window.open('','_blank'); if(!w){ toast('Permita pop-ups para imprimir','⚠'); return; } w.document.write(docPrintHTML(d)); w.document.close(); w.focus(); setTimeout(()=>{try{w.print();}catch(e){}},350); }
 function docDownload(d){ const blob=new Blob([docPrintHTML(d)],{type:'text/html;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=((d.titulo||'documento').replace(/[^\w -]/g,'')||'documento')+'.html'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url); }
@@ -1465,14 +1508,15 @@ async function pacLoad(tok){
   const el=document.getElementById('pacPage');
   try{ const {data}=await SB.rpc('nx_patient_docs_public',{p_token:tok});
     if(!data||!data.ok){ el.innerHTML='<div style="color:#c0392b;margin-top:40px">Link inválido ou expirado.</div>'; return; }
-    window.__pac={docs:data.docs||[],paciente:data.paciente};
+    const cl=data.clinica||{}; const pnome=(data.paciente&&data.paciente.nome)||'';
+    window.__pac={docs:data.docs||[],paciente:data.paciente,clinica:cl};
     el.style.textAlign='left'; el.style.color='inherit';
-    el.innerHTML=`<div style="text-align:center;margin-bottom:20px"><div style="font-family:var(--display,sans-serif);font-weight:800;font-size:22px;color:#143A4E">${data.clinica}</div><div style="color:#6b7b83">Documentos de <b>${data.paciente}</b></div></div>
-      ${(data.docs&&data.docs.length)?data.docs.map((d,i)=>`<div class="pac-doc"><div class="pac-k">${DKIND[d.kind]||d.kind}</div><div class="pac-t">${d.titulo||''}</div><div class="pac-c">${(d.conteudo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="pac-sig">✔ Assinado pelo médico</div><div class="pac-acts"><button class="cl-btn pri" style="margin:0" onclick="pacPrint(${i})">Imprimir</button><button class="rc-b2" onclick="pacExport(${i})">Exportar</button></div></div>`).join(''):'<div style="text-align:center;color:#6b7b83;margin-top:40px">Nenhum documento assinado disponível ainda.</div>'}`;
+    el.innerHTML=`<div style="text-align:center;margin-bottom:20px"><div style="font-family:var(--display,sans-serif);font-weight:800;font-size:22px;color:#143A4E">${cl.nome||''}</div><div style="color:#6b7b83">Documentos de <b>${pnome}</b></div></div>
+      ${(data.docs&&data.docs.length)?data.docs.map((d,i)=>`<div class="pac-doc"><div class="pac-k">${DKIND[d.kind]||d.kind} · Nº ${d.numero||''}</div><div class="pac-t">${d.titulo||''}</div><div class="pac-c">${(d.conteudo||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div><div class="pac-sig">✔ Assinado${(d.assinante&&d.assinante.nome)?(' por '+d.assinante.nome):' pelo médico'}${(d.assinante&&d.assinante.crm)?(' — '+d.assinante.crm):''}</div><div class="pac-acts"><button class="cl-btn pri" style="margin:0" onclick="pacPrint(${i})">Imprimir</button><button class="rc-b2" onclick="pacExport(${i})">Exportar</button></div></div>`).join(''):'<div style="text-align:center;color:#6b7b83;margin-top:40px">Nenhum documento assinado disponível ainda.</div>'}`;
   }catch(e){ el.innerHTML='<div style="color:#c0392b;margin-top:40px">Erro ao carregar.</div>'; }
 }
-function pacPrint(i){ const d=Object.assign({signed:true,paciente:window.__pac.paciente},window.__pac.docs[i]); docOpenPrint(d); }
-function pacExport(i){ const d=Object.assign({signed:true,paciente:window.__pac.paciente},window.__pac.docs[i]); docDownload(d); }
+function pacPrint(i){ const d=Object.assign({signed:true,clinica:window.__pac.clinica,paciente:window.__pac.paciente},window.__pac.docs[i]); docOpenPrint(d); }
+function pacExport(i){ const d=Object.assign({signed:true,clinica:window.__pac.clinica,paciente:window.__pac.paciente},window.__pac.docs[i]); docDownload(d); }
 const CAT={meds:[],cid:[],exams:[],specialties:[],loaded:false};
 async function catLoad(force){
   if(!SB){ return; } if(CAT.loaded&&!force) return;
