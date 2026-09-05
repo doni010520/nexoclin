@@ -683,8 +683,8 @@ const NAV={
 };
 const TITLES={cockpit:'Atendimento',agenda:'Agenda',clinica:'Minha clínica',plataforma:'Plataforma',relatorios:'Relatórios',integr:'Integrações',equipe:'Equipe & acessos'};
 let ROLE=null;
-const SB_URL='https://kzbazzwfdagfhyxuadqp.supabase.co';
-const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6YmF6endmZGFnZmh5eHVhZHFwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwNTYwMjUsImV4cCI6MjEwMjYzMjAyNX0.CembztJIxu21Q2WB6BV4iCGWLkYo8xXQW7Id35b3pyM';
+const SB_URL='https://knhugeyrphfnpdllrosb.supabase.co';
+const SB_KEY='sb_publishable_UnJIY8QsvVR-gCqPmmBF1w_zEvUcmZD';
 const SB=(window.supabase&&window.supabase.createClient)?window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}}):null;
 const NX={real:false,clinic:null,me:null,clinicInfo:null};
 function curWa(){ return (((NX.real&&NX.clinicInfo&&NX.clinicInfo.telefone_whatsapp)||CLINIC.whatsapp)||'').replace(/\D/g,''); }
