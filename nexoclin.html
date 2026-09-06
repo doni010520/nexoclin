@@ -1296,8 +1296,31 @@ function renderRCConversa(){
     <div class="rc-send"><input id="rcMsg" placeholder="Escrever mensagem..." onkeydown="if(event.key==='Enter')rcSend()"><button class="cl-btn pri" style="margin:0;padding:10px 14px" onclick="rcSend()">Enviar</button></div>`;
   rcSignMedia();
 }
-async function rcSend(){ const inp=document.getElementById('rcMsg'); const t=(inp&&inp.value||'').trim(); if(!t||!RC.activeId) return;
-  try{ await SB.rpc('nx_conv_send',{p_conv:RC.activeId,p_body:t}); await rcOpen(RC.activeId); }catch(e){ toast('Erro ao enviar','⚠'); } }
+// Envio pelo cockpit. Passa pela Edge Function wa-send, que fala com a Graph
+// API da Meta e so entao grava. O nx_conv_send antigo apenas gravava no banco:
+// a mensagem aparecia na tela e o paciente nunca recebia.
+async function rcSend(){
+  const inp=document.getElementById('rcMsg');
+  const t=(inp&&inp.value||'').trim();
+  if(!t||!RC.activeId) return;
+  const antes=inp.value; inp.value=''; inp.disabled=true;
+  try{
+    const { data:sess } = await SB.auth.getSession();
+    const r = await fetch(SB_URL+'/functions/v1/wa-send',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+sess.session.access_token,'Content-Type':'application/json'},
+      body: JSON.stringify({ conversation_id:RC.activeId, text:t })
+    });
+    const d = await r.json();
+    if(!d.ok){
+      inp.value=antes;
+      if(d.erro==='janela_fechada') toast('Passaram-se mais de 24h desde a ultima mensagem do paciente. Use um template.','⚠');
+      else toast('Nao enviou: '+(d.mensagem||d.erro||'')+' '+((d.meta&&d.meta.message)||''),'⚠');
+    }
+    await rcOpen(RC.activeId);
+  }catch(e){ inp.value=antes; toast('Erro ao enviar: '+(e.message||e),'⚠'); }
+  finally{ inp.disabled=false; inp.focus(); }
+}
 function rcActions(){
   const c=RC.active&&RC.active.conv; if(!c) return ''; const st=c.status; const btns=[];
   const staff=['recepcao','secretaria','gestor','admin'].includes(ROLE);
