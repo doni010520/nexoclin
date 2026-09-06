@@ -1678,32 +1678,56 @@ function waMsg(txt, cor){
   document.head.appendChild(js);
 })();
 
+// O popup manda WABA e numero por postMessage, antes de devolver o codigo.
+// Sem este ouvinte a gente perde os dois e a conexao nao sabe qual numero usar.
+window.addEventListener('message', function(ev){
+  var host; try{ host = new URL(ev.origin).hostname; }catch(e){ return; }
+  if (host.indexOf('facebook.com') === -1) return;
+  try{
+    var d = JSON.parse(ev.data);
+    if (d.type !== 'WA_EMBEDDED_SIGNUP') return;
+    WA_ES.ultimo_evento = d.event;
+    if (d.data){
+      if (d.data.waba_id)         WA_ES.waba_id = d.data.waba_id;
+      if (d.data.phone_number_id) WA_ES.phone_number_id = d.data.phone_number_id;
+      if (d.data.error_message)   WA_ES.erro = d.data.error_message;
+    }
+  }catch(e){}
+});
+
 function waConectar(){
   if (!window.FB){ waMsg('Ainda carregando o cadastro da Meta. Tente de novo em alguns segundos.','err'); return; }
   waMsg('Abrindo o cadastro da Meta...');
+  WA_ES = {};
   // Chamada SINCRONA dentro do clique: e o que permite o popup abrir.
   FB.login(function(resp){
-    var code = resp && resp.authResponse && resp.authResponse.code;
-    if (!code){ waMsg('Cadastro cancelado ou sem permissao.','err'); return; }
+    var a = (resp && resp.authResponse) || {};
+    var code = a.code, token = a.accessToken;
+    if (!code && !token){
+      // Mostra o retorno cru: "cancelado" escondia o motivo real.
+      waMsg('Nao recebi codigo nem token. Facebook devolveu: ' + JSON.stringify(resp||null)
+            + ' | popup: ' + JSON.stringify(WA_ES), 'err');
+      return;
+    }
     waMsg('Conectando o numero... isso leva alguns segundos.');
-    waEnviarCodigo(code);
+    waEnviarCodigo(code, token);
   }, { config_id: WA_FB_CONFIG, response_type: 'code',
        override_default_response_type: true,
        extras: { setup:{}, featureType:'', sessionInfoVersion:'3' } });
 }
 
-async function waEnviarCodigo(code){
+async function waEnviarCodigo(code, token){
   try{
     const { data:sess } = await SB.auth.getSession();
     const r = await fetch(SB_URL+'/functions/v1/wa-signup',{
       method:'POST',
       headers:{'Authorization':'Bearer '+sess.session.access_token,'Content-Type':'application/json'},
-      body: JSON.stringify({ clinic_id:NX.clinic, code:code,
+      body: JSON.stringify({ clinic_id:NX.clinic, code:code||null, token:token||null,
         waba_id:WA_ES.waba_id, phone_number_id:WA_ES.phone_number_id })
     });
     const d = await r.json();
     if (d.ok){ waMsg('Conectado: '+(d.numero||''),'ok'); waLoad(); }
-    else waMsg('Falhou: '+(d.erro||'')+' '+JSON.stringify(d.passos||d.meta||{}),'err');
+    else waMsg('Falhou: '+(d.erro||'')+' - '+JSON.stringify(d.passos||d.meta||d),'err');
   }catch(e){ waMsg('Erro: '+(e.message||e),'err'); }
 }
 
