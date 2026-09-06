@@ -321,6 +321,11 @@ audio.rc-media{width:230px;max-width:100%}
 .wa-AUTHENTICATION{background:#FFF3D6;color:#B4790B}
 .wa-tpl-b{font-size:12px;color:#22343c;line-height:1.5;white-space:pre-wrap}
 .wa-tpl-d{font-size:11px;color:var(--mute);margin-top:5px}
+
+.canal-item{display:flex;gap:14px;align-items:flex-start;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.canal-qr img{border-radius:8px;border:1px solid var(--line);display:block}
+.canal-info{flex:1;min-width:0}
+.canal-nome{font-weight:700;color:var(--navy);font-size:13.5px}
 </style>
 <style id="wa-style">
 /* ===== Cockpit de Atendimento WhatsApp — escopo .wa- ===== */
@@ -848,7 +853,7 @@ function cpfCheck(el){
 function qrURL(data,size){ return 'https://api.qrserver.com/v1/create-qr-code/?size='+size+'x'+size+'&margin=8&data='+encodeURIComponent(data); }
 function clinicaView(){
   const real=NX.real&&NX.clinicInfo;
-  if(NX.real&&NX.clinic) setTimeout(waLoad,0);
+  if(NX.real&&NX.clinic){ setTimeout(waLoad,0); setTimeout(canalLoad,0); }
   const I=NX.clinicInfo||{};
   const C= real ? {nome:I.nome||'',razao:I.razao_social||'',fantasia:I.nome_fantasia||'',cnpj:I.cnpj||'',cnes:I.cnes||'',email:I.email||'',whatsapp:I.telefone_whatsapp||'',cep:I.cep||'',endereco:I.endereco||'',numero:I.numero||'',complemento:I.complemento||'',bairro:I.bairro||'',cidade:I.cidade||'',estado:I.estado||'',resp:I.responsavel_tecnico||'',respCrm:I.responsavel_crm||'',slug:I.link_slug||'',foto:(I.nome||'C').replace(/[^A-Za-zÀ-ÿ ]/g,'').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()||'C'}
                 : {nome:CLINIC.nome,razao:'',fantasia:'',cnpj:CLINIC.cnpj,cnes:'',email:'',whatsapp:CLINIC.whatsapp,cep:'',endereco:CLINIC.endereco,numero:'',complemento:'',bairro:'',cidade:CLINIC.cidade,estado:CLINIC.estado,resp:'',respCrm:'',slug:CLINIC.slug,foto:CLINIC.foto};
@@ -899,6 +904,7 @@ function clinicaView(){
         <div id="npResult"></div>
       </div>
       ${NX.real?`<div class="cl-card cl-wide" id="waCard">${waCardShell()}</div>`:''}
+      ${NX.real?`<div class="cl-card cl-wide" id="canalCard">${canalCardShell()}</div>`:''}
     </div></div>`;
 }
 function gerarConvite(){
@@ -1709,6 +1715,32 @@ async function agSave(){ const g=id=>((document.getElementById(id)||{}).value||'
     if(error) throw error; closeModal(); agLoad(); toast('Agendado! Confirmação e lembretes por WhatsApp seguem automáticos.','📅'); }
   catch(e){ toast('Erro: '+(e.message||e),'⚠'); } }
 async function agStatus(id,st){ try{ await SB.rpc('nx_appt_set_status',{p_appt:id,p_status:st}); agLoad(); toast('Status: '+st); }catch(e){ toast('Erro','⚠'); } }
+function canalCardShell(){ return `<div class="cl-ct">Canais de atendimento <span class="rc-super">WhatsApp</span></div>
+  <div class="cl-cs">Link e QR Code para o paciente iniciar o atendimento pelo WhatsApp da clínica. Cada médico tem um link próprio (mesmo número, com mensagem que já identifica o profissional).</div>
+  <div id="canalBox" style="margin-top:10px"><div class="rc-empty">Carregando…</div></div>`; }
+function waLink(num, texto){ return 'https://wa.me/'+num+'?text='+encodeURIComponent(texto); }
+function qrImg(url){ return 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data='+encodeURIComponent(url); }
+async function canalLoad(){
+  const box=document.getElementById('canalBox'); if(!box) return;
+  const num=(((NX.clinicInfo||{}).telefone_whatsapp)||'').replace(/\D/g,'');
+  if(!num){ box.innerHTML='<div class="cl-cs">Preencha o <b>WhatsApp oficial</b> da clínica (acima) e salve o perfil para gerar os links e QR Codes.</div>'; return; }
+  let meds=[]; try{ const {data}=await SB.rpc('nx_clinic_medicos',{p_clinic:NX.clinic}); meds=data||[]; }catch(e){}
+  const clnome=((NX.clinicInfo||{}).nome)||'a clínica';
+  const clinicLink=waLink(num,'Olá! Gostaria de iniciar um atendimento na '+clnome+'.');
+  let html=`<div class="canal-item"><div class="canal-qr"><img src="${qrImg(clinicLink)}" alt="QR clínica" width="120" height="120"></div>
+    <div class="canal-info"><div class="canal-nome">Clínica — atendimento geral</div>
+      <div class="cl-inp" style="margin-top:6px"><code>${clinicLink}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div>
+      <a class="rc-b2" href="${qrImg(clinicLink)}" target="_blank" style="margin-top:6px;display:inline-block;text-decoration:none">Baixar QR</a></div></div>`;
+  if(meds.length){ html+='<div class="cl-sec2" style="margin-top:16px">Por médico</div>';
+    html+=meds.map(m=>{ const txt='Olá! Gostaria de atendimento com '+(m.nome||'o(a) médico(a)')+(m.especialidade?(' ('+m.especialidade+')'):'')+'.'; const lk=waLink(num,txt);
+      return `<div class="canal-item"><div class="canal-qr"><img src="${qrImg(lk)}" alt="QR ${m.nome}" width="100" height="100"></div>
+        <div class="canal-info"><div class="canal-nome">${m.nome||'Médico(a)'}${m.especialidade?` · <span style="color:var(--mute);font-weight:500">${m.especialidade}</span>`:''}</div>
+        <div class="cl-inp" style="margin-top:6px"><code>${lk}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div>
+        <a class="rc-b2" href="${qrImg(lk)}" target="_blank" style="margin-top:6px;display:inline-block;text-decoration:none">Baixar QR</a></div></div>`;
+    }).join('');
+  } else { html+='<div class="cl-cs" style="margin-top:12px">Cadastre médicos em <b>Equipe</b> para gerar o link/QR de cada um.</div>'; }
+  box.innerHTML=html;
+}
 function nxCheckOnboard(){
   const tok=new URLSearchParams(location.search).get('onboard'); if(!tok) return;
   const card=document.querySelector('#login .login-card'); if(!card) return;
