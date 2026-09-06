@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NexoClin - Conectar WhatsApp</title>
+<style>
+  :root{--navy:#143A4E;--cyan:#29A9D0;--ink:#22343c;--mute:#6b7b83;--line:#e4ebee;--bg:#F4F7F9;--ok:#12996A;--err:#D9403A}
+  *{box-sizing:border-box}
+  body{font-family:Inter,'Segoe UI',system-ui,sans-serif;color:var(--ink);margin:0;background:var(--bg);line-height:1.6}
+  .wrap{max-width:640px;margin:0 auto;padding:40px 20px 80px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 24px;margin:16px 0}
+  h1{font-size:22px;color:var(--navy);margin:0 0 4px}
+  .sub{color:var(--mute);font-size:14px;margin-bottom:18px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--navy);margin:12px 0 4px}
+  input,select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:9px;font-size:14px;font-family:inherit}
+  button{background:var(--cyan);color:#fff;font-weight:700;border:0;border-radius:10px;padding:12px 20px;font-size:15px;cursor:pointer;font-family:inherit}
+  button.zap{background:#25D366;width:100%;margin-top:8px}
+  .msg{padding:10px 14px;border-radius:9px;font-size:13.5px;margin-top:12px;display:none}
+  .msg.on{display:block}
+  .msg.ok{background:#E6F7F1;color:var(--ok)}
+  .msg.err{background:#FDECEB;color:var(--err)}
+  .msg.info{background:#EAF7FB;color:#1596BE}
+  pre{background:#0f2733;color:#d7e6ee;border-radius:10px;padding:14px;overflow:auto;font-size:12px;margin-top:12px;display:none}
+  pre.on{display:block}
+  .step{font-size:12.5px;color:var(--mute);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Conectar WhatsApp</h1>
+  <div class="sub">Ambiente de trabalho - banco de testes</div>
+
+  <div class="card" id="cardLogin">
+    <label>E-mail</label>
+    <input id="em" type="email" value="gestor@nexoclin.dev" autocomplete="username">
+    <label>Senha</label>
+    <input id="pw" type="password" value="Nexo@2026" autocomplete="current-password">
+    <div style="margin-top:14px"><button id="btLogin">Entrar</button></div>
+    <div class="msg err" id="msgLogin"></div>
+  </div>
+
+  <div class="card" id="cardConn" style="display:none">
+    <div class="sub" id="quem"></div>
+    <label>Clinica</label>
+    <select id="clinica"></select>
+    <label>PIN de verificacao em duas etapas (6 digitos)</label>
+    <input id="pin" inputmode="numeric" maxlength="6" value="159357">
+    <div class="step">Guarde este PIN: a Meta pede ele para reconfigurar o numero depois.</div>
+    <button class="zap" id="btZap">Conectar com o WhatsApp</button>
+    <div class="msg info" id="msgInfo"></div>
+    <div class="msg ok"   id="msgOk"></div>
+    <div class="msg err"  id="msgErr"></div>
+    <pre id="out"></pre>
+  </div>
+</div>
+
+<script>
+var SB_URL = 'https://knhugeyrphfnpdllrosb.supabase.co';
+var SB_KEY = 'sb_publishable_UnJIY8QsvVR-gCqPmmBF1w_zEvUcmZD';
+var FB_APP_ID = '1501308275071442';   // app do MVF (Tech Provider)
+var FB_CONFIG = '1061690539809676';   // configuracao "NexoClin"
+var TOKEN = null, ES = {};
+
+function $(id){ return document.getElementById(id); }
+function show(id, txt){ var e=$(id); e.textContent=txt; e.classList.add('on'); }
+function hide(id){ $(id).classList.remove('on'); }
+
+$('btLogin').onclick = async function(){
+  hide('msgLogin');
+  var r = await fetch(SB_URL + '/auth/v1/token?grant_type=password', {
+    method:'POST', headers:{'apikey':SB_KEY,'Content-Type':'application/json'},
+    body: JSON.stringify({ email:$('em').value.trim(), password:$('pw').value })
+  });
+  var d = await r.json();
+  if(!d.access_token){ show('msgLogin', d.error_description || d.msg || 'Nao consegui entrar'); return; }
+  TOKEN = d.access_token;
+  $('quem').textContent = 'Conectado como ' + d.user.email;
+  $('cardLogin').style.display='none';
+  $('cardConn').style.display='block';
+  carregarClinicas();
+};
+
+async function carregarClinicas(){
+  var r = await fetch(SB_URL + '/rest/v1/rpc/nx_me', {
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:'{}'
+  });
+  var me = await r.json();
+  var sel = $('clinica'); sel.innerHTML='';
+  var lista = (me && me.clinics) || [];
+  for (var i=0;i<lista.length;i++){
+    var c = lista[i];
+    var o = document.createElement('option');
+    o.value = c.clinic_id;
+    o.textContent = (c.clinic_nome || c.nome || c.clinic_id) + ' - ' + c.role;
+    sel.appendChild(o);
+  }
+  if(!sel.options.length) show('msgErr','Este usuario nao e gestor de nenhuma clinica.');
+}
+
+window.fbAsyncInit = function(){
+  FB.init({ appId: FB_APP_ID, cookie:true, xfbml:false, version:'v21.0' });
+};
+(function(d,s,id){
+  var js, f=d.getElementsByTagName(s)[0];
+  if(d.getElementById(id)) return;
+  js=d.createElement(s); js.id=id;
+  js.src='https://connect.facebook.net/pt_BR/sdk.js';
+  f.parentNode.insertBefore(js,f);
+}(document,'script','fb-sdk'));
+
+// O popup manda WABA e numero por postMessage antes de fechar.
+window.addEventListener('message', function(ev){
+  var host;
+  try { host = new URL(ev.origin).hostname; } catch(e){ return; }
+  if (host.indexOf('facebook.com') === -1) return;
+  try {
+    var d = JSON.parse(ev.data);
+    if (d.type === 'WA_EMBEDDED_SIGNUP' && d.event === 'FINISH'){
+      ES.waba_id = d.data && d.data.waba_id;
+      ES.phone_number_id = d.data && d.data.phone_number_id;
+    }
+  } catch(e){}
+});
+
+$('btZap').onclick = function(){
+  hide('msgOk'); hide('msgErr'); $('out').classList.remove('on');
+  show('msgInfo','Abrindo o cadastro da Meta...');
+  FB.login(function(resp){
+    var code = resp && resp.authResponse && resp.authResponse.code;
+    if(!code){ hide('msgInfo'); show('msgErr','Cadastro cancelado ou sem permissao.'); return; }
+    show('msgInfo','Conectando o numero... isso leva alguns segundos.');
+    conectar(code);
+  }, {
+    config_id: FB_CONFIG,
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: { setup:{}, featureType:'', sessionInfoVersion:'3' }
+  });
+};
+
+async function conectar(code){
+  var r = await fetch(SB_URL + '/functions/v1/wa-signup', {
+    method:'POST',
+    headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body: JSON.stringify({
+      clinic_id: $('clinica').value,
+      code: code,
+      pin: $('pin').value.trim(),
+      waba_id: ES.waba_id,
+      phone_number_id: ES.phone_number_id
+    })
+  });
+  var d = await r.json();
+  hide('msgInfo');
+  $('out').textContent = JSON.stringify(d, null, 2);
+  $('out').classList.add('on');
+  if(d.ok) show('msgOk', 'Conectado: ' + (d.numero||'') + (d.nome_verificado ? ' - '+d.nome_verificado : ''));
+  else show('msgErr', d.erro || 'Falhou - veja o detalhe abaixo.');
+}
+</script>
+</body>
+</html>
