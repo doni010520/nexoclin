@@ -1623,23 +1623,94 @@ function waRender(d,tpls){
   const soft=st==='conectado'?'#DCF3EA':st==='pendente'?'#FFF3D6':'#EEF2F4';
   box.innerHTML=`
     <div style="margin-bottom:12px"><span class="rc-stat" style="background:${soft};color:${color}">${st.toUpperCase()}</span>${d.connected_at?` <span style="color:var(--mute);font-size:12px">desde ${new Date(d.connected_at).toLocaleDateString('pt-BR')}</span>`:''}</div>
-    <div class="cl-2"><div class="cl-field"><label>Número exibido</label><input id="waNum" value="${d.display_number||''}" placeholder="+55 21 90000-0000"></div><div class="cl-field"><label>Phone Number ID</label><input id="waPhone" value="${d.phone_number_id||''}" placeholder="Meta phone_number_id"></div></div>
-    <div class="cl-field"><label>WhatsApp Business Account ID (WABA)</label><input id="waWaba" value="${d.waba_id||''}" placeholder="waba_id"></div>
-    <div class="cl-2"><div class="cl-field"><label>Access Token ${d.token_mask?`<span style="color:var(--mute)">(atual ${d.token_mask})</span>`:''}</label><input id="waToken" type="password" autocomplete="off" placeholder="${d.token_mask?'deixe vazio p/ manter':'token permanente da Meta'}"></div><div class="cl-field"><label>App Secret ${d.secret_set?'<span style="color:var(--mute)">(definido)</span>':''}</label><input id="waSecret" type="password" autocomplete="off" placeholder="${d.secret_set?'deixe vazio p/ manter':'segredo do app'}"></div></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button class="cl-btn pri" style="margin:0" onclick="waSave()">Salvar conexão</button>${st!=='desconectado'?'<button class="rc-b2" onclick="waDisconnect()">Desconectar</button>':''}</div>
-    ${d.webhook_url?`<div class="cl-sec2" style="margin-top:16px">Webhook (configurar na Meta)</div>
-      <div class="cl-field"><label>Callback URL</label><div class="cl-inp"><code>${d.webhook_url}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div></div>
-      <div class="cl-field"><label>Verify Token <button class="cl-copy" style="margin-left:6px" onclick="waRotate()">Gerar novo</button></label><div class="cl-inp"><code>${d.verify_token||'—'}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div></div>`
-      :'<div class="cl-cs" style="margin-top:10px">Salve a conexão para gerar a URL de webhook e o verify token.</div>'}
+    ${st==='conectado'?`
+      <div class="cl-2">
+        <div class="cl-field"><label>N&uacute;mero</label><div class="cl-inp"><code>${d.display_number||'&mdash;'}</code></div></div>
+        <div class="cl-field"><label>Phone Number ID</label><div class="cl-inp"><code>${d.phone_number_id||'&mdash;'}</code></div></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="cl-btn" style="margin:0;background:#25D366;color:#fff;border:0" onclick="waConectar()">Reconectar</button>
+        <button class="rc-b2" onclick="waDisconnect()">Desconectar</button>
+      </div>`
+    :`
+      <p style="color:var(--mute);font-size:13.5px;margin:0 0 12px">Conecte o WhatsApp da cl&iacute;nica. Voc&ecirc; ser&aacute; levado ao cadastro da Meta para informar o n&uacute;mero e confirmar o c&oacute;digo por SMS.</p>
+      <button class="cl-btn pri" style="margin:0;background:#25D366;border:0;width:100%;padding:13px" onclick="waConectar()">Conectar com o WhatsApp</button>
+      <div style="margin-top:10px;font-size:12.5px;color:var(--mute)">O n&uacute;mero escolhido passa a ser atendido aqui e <b>deixa de funcionar no aplicativo do celular</b>.</div>`}
+    <div id="waMsg" style="margin-top:12px"></div>
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;color:var(--mute);font-size:12.5px">Conex&atilde;o manual (avan&ccedil;ado)</summary>
+      <div class="cl-2" style="margin-top:10px"><div class="cl-field"><label>N&uacute;mero exibido</label><input id="waNum" value="${d.display_number||''}" placeholder="+55 21 90000-0000"></div><div class="cl-field"><label>Phone Number ID</label><input id="waPhone" value="${d.phone_number_id||''}" placeholder="phone_number_id"></div></div>
+      <div class="cl-field"><label>WABA ID</label><input id="waWaba" value="${d.waba_id||''}" placeholder="waba_id"></div>
+      <div class="cl-field"><label>Access Token ${d.token_mask?`<span style="color:var(--mute)">(atual ${d.token_mask})</span>`:''}</label><input id="waToken" type="password" autocomplete="off" placeholder="${d.token_mask?'deixe vazio p/ manter':'token da Meta'}"></div>
+      <button class="cl-btn" style="margin-top:8px" onclick="waSave()">Salvar manualmente</button>
+    </details>
     <div class="cl-sec2" style="margin-top:16px">Biblioteca de templates (${tpls.length})</div>
     <div class="wa-tpls">${tpls.map(t=>`<div class="wa-tpl"><div class="wa-tpl-h"><b>${t.name}</b><span class="wa-cat wa-${t.category}">${t.category}</span></div><div class="wa-tpl-b">${(t.body||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>${t.descricao?`<div class="wa-tpl-d">${t.descricao}</div>`:''}</div>`).join('')}</div>`;
 }
 async function waSave(){
   const g=id=>((document.getElementById(id)||{}).value||'').trim();
-  try{ const {data,error}=await SB.rpc('nx_wa_connect',{p_clinic:NX.clinic,p_display:g('waNum'),p_phone_id:g('waPhone'),p_waba:g('waWaba'),p_token:g('waToken'),p_secret:g('waSecret')});
-    if(error) throw error; toast('Conexão salva — '+((data&&data.status)||''),'💬'); waLoad(); }
-  catch(e){ toast('Erro: '+(e.message||e),'⚠'); }
+  try{ const {data,error}=await SB.rpc('nx_wa_connect',{p_clinic:NX.clinic,p_display:g('waNum'),p_phone_id:g('waPhone'),p_waba:g('waWaba'),p_token:g('waToken'),p_secret:''});
+    if(error) throw error; toast('Conexao salva','ok'); waLoad(); }
+  catch(e){ toast('Erro: '+(e.message||e),'!'); }
 }
+
+// ===== Conexao pelo cadastro incorporado da Meta (Embedded Signup) =====
+// O popup devolve um codigo; a Edge Function wa-signup troca por token,
+// registra o numero, assina a WABA e aponta o webhook para ca.
+const WA_FB_APP_ID = '1501308275071442';
+const WA_FB_CONFIG = '1061690539809676';
+let WA_ES = {};
+
+function waMsg(txt, cor){
+  const e=document.getElementById('waMsg'); if(!e) return;
+  e.innerHTML = txt ? `<div style="padding:10px 14px;border-radius:9px;font-size:13.5px;background:${cor==='ok'?'#E6F7F1':cor==='err'?'#FDECEB':'#EAF7FB'};color:${cor==='ok'?'#12996A':cor==='err'?'#D9403A':'#1596BE'}">${txt}</div>` : '';
+}
+
+function waFbInit(){
+  if (window.FB) return Promise.resolve();
+  return new Promise(res=>{
+    window.fbAsyncInit=function(){ FB.init({appId:WA_FB_APP_ID,cookie:true,xfbml:false,version:'v21.0'}); res(); };
+    if (document.getElementById('fb-sdk')) return;
+    const js=document.createElement('script'); js.id='fb-sdk';
+    js.src='https://connect.facebook.net/pt_BR/sdk.js';
+    document.getElementsByTagName('script')[0].parentNode.insertBefore(js,document.getElementsByTagName('script')[0]);
+  });
+}
+
+window.addEventListener('message', function(ev){
+  let host; try{ host=new URL(ev.origin).hostname; }catch(e){ return; }
+  if (host.indexOf('facebook.com')===-1) return;
+  try{ const d=JSON.parse(ev.data);
+    if (d.type==='WA_EMBEDDED_SIGNUP' && d.event==='FINISH'){
+      WA_ES.waba_id=d.data&&d.data.waba_id; WA_ES.phone_number_id=d.data&&d.data.phone_number_id;
+    }
+  }catch(e){}
+});
+
+async function waConectar(){
+  waMsg('Abrindo o cadastro da Meta...');
+  await waFbInit();
+  FB.login(async function(resp){
+    const code = resp && resp.authResponse && resp.authResponse.code;
+    if(!code){ waMsg('Cadastro cancelado.','err'); return; }
+    waMsg('Conectando o numero... isso leva alguns segundos.');
+    try{
+      const { data:sess } = await SB.auth.getSession();
+      const r = await fetch(SB_URL+'/functions/v1/wa-signup',{
+        method:'POST',
+        headers:{'Authorization':'Bearer '+sess.session.access_token,'Content-Type':'application/json'},
+        body: JSON.stringify({ clinic_id:NX.clinic, code:code,
+          waba_id:WA_ES.waba_id, phone_number_id:WA_ES.phone_number_id })
+      });
+      const d = await r.json();
+      if(d.ok){ waMsg('Conectado: '+(d.numero||''),'ok'); waLoad(); }
+      else waMsg('Falhou: '+(d.erro||'')+' '+JSON.stringify(d.passos||d.meta||{}),'err');
+    }catch(e){ waMsg('Erro: '+(e.message||e),'err'); }
+  }, { config_id:WA_FB_CONFIG, response_type:'code',
+       override_default_response_type:true,
+       extras:{ setup:{}, featureType:'', sessionInfoVersion:'3' } });
+}
+
 async function waDisconnect(){ try{ await SB.rpc('nx_wa_disconnect',{p_clinic:NX.clinic}); toast('WhatsApp desconectado'); waLoad(); }catch(e){ toast('Erro','⚠'); } }
 async function waRotate(){ try{ await SB.rpc('nx_wa_rotate_verify',{p_clinic:NX.clinic}); toast('Novo verify token gerado'); waLoad(); }catch(e){ toast('Erro','⚠'); } }
 function nxCheckOnboard(){
