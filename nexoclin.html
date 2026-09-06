@@ -1634,8 +1634,7 @@ function waRender(d,tpls){
       </div>`
     :`
       <p style="color:var(--mute);font-size:13.5px;margin:0 0 12px">Conecte o WhatsApp da cl&iacute;nica. Voc&ecirc; ser&aacute; levado ao cadastro da Meta para informar o n&uacute;mero e confirmar o c&oacute;digo por SMS.</p>
-      <button class="cl-btn pri" style="margin:0;background:#25D366;border:0;width:100%;padding:13px" onclick="waConectar()">Conectar com o WhatsApp</button>
-      <div style="margin-top:10px;font-size:12.5px;color:var(--mute)">O n&uacute;mero escolhido passa a ser atendido aqui e <b>deixa de funcionar no aplicativo do celular</b>.</div>`}
+      <button class="cl-btn pri" style="margin:0;background:#25D366;border:0;width:100%;padding:13px" onclick="waConectar()">Conectar com o WhatsApp</button>`}
     <div id="waMsg" style="margin-top:12px"></div>
     <details style="margin-top:14px">
       <summary style="cursor:pointer;color:var(--mute);font-size:12.5px">Conex&atilde;o manual (avan&ccedil;ado)</summary>
@@ -1666,49 +1665,46 @@ function waMsg(txt, cor){
   e.innerHTML = txt ? `<div style="padding:10px 14px;border-radius:9px;font-size:13.5px;background:${cor==='ok'?'#E6F7F1':cor==='err'?'#FDECEB':'#EAF7FB'};color:${cor==='ok'?'#12996A':cor==='err'?'#D9403A':'#1596BE'}">${txt}</div>` : '';
 }
 
-function waFbInit(){
-  if (window.FB) return Promise.resolve();
-  return new Promise(res=>{
-    window.fbAsyncInit=function(){ FB.init({appId:WA_FB_APP_ID,cookie:true,xfbml:false,version:'v21.0'}); res(); };
-    if (document.getElementById('fb-sdk')) return;
-    const js=document.createElement('script'); js.id='fb-sdk';
-    js.src='https://connect.facebook.net/pt_BR/sdk.js';
-    document.getElementsByTagName('script')[0].parentNode.insertBefore(js,document.getElementsByTagName('script')[0]);
-  });
+// O SDK e carregado assim que a pagina abre. Se ele for carregado dentro do
+// clique, o await quebra o gesto do usuario e o navegador bloqueia o popup.
+(function carregaFbSdk(){
+  if (document.getElementById('fb-sdk')) return;
+  window.fbAsyncInit = function(){
+    FB.init({ appId: WA_FB_APP_ID, cookie:true, xfbml:false, version:'v21.0' });
+  };
+  var js = document.createElement('script');
+  js.id = 'fb-sdk'; js.async = true; js.defer = true;
+  js.src = 'https://connect.facebook.net/pt_BR/sdk.js';
+  document.head.appendChild(js);
+})();
+
+function waConectar(){
+  if (!window.FB){ waMsg('Ainda carregando o cadastro da Meta. Tente de novo em alguns segundos.','err'); return; }
+  waMsg('Abrindo o cadastro da Meta...');
+  // Chamada SINCRONA dentro do clique: e o que permite o popup abrir.
+  FB.login(function(resp){
+    var code = resp && resp.authResponse && resp.authResponse.code;
+    if (!code){ waMsg('Cadastro cancelado ou sem permissao.','err'); return; }
+    waMsg('Conectando o numero... isso leva alguns segundos.');
+    waEnviarCodigo(code);
+  }, { config_id: WA_FB_CONFIG, response_type: 'code',
+       override_default_response_type: true,
+       extras: { setup:{}, featureType:'', sessionInfoVersion:'3' } });
 }
 
-window.addEventListener('message', function(ev){
-  let host; try{ host=new URL(ev.origin).hostname; }catch(e){ return; }
-  if (host.indexOf('facebook.com')===-1) return;
-  try{ const d=JSON.parse(ev.data);
-    if (d.type==='WA_EMBEDDED_SIGNUP' && d.event==='FINISH'){
-      WA_ES.waba_id=d.data&&d.data.waba_id; WA_ES.phone_number_id=d.data&&d.data.phone_number_id;
-    }
-  }catch(e){}
-});
-
-async function waConectar(){
-  waMsg('Abrindo o cadastro da Meta...');
-  await waFbInit();
-  FB.login(async function(resp){
-    const code = resp && resp.authResponse && resp.authResponse.code;
-    if(!code){ waMsg('Cadastro cancelado.','err'); return; }
-    waMsg('Conectando o numero... isso leva alguns segundos.');
-    try{
-      const { data:sess } = await SB.auth.getSession();
-      const r = await fetch(SB_URL+'/functions/v1/wa-signup',{
-        method:'POST',
-        headers:{'Authorization':'Bearer '+sess.session.access_token,'Content-Type':'application/json'},
-        body: JSON.stringify({ clinic_id:NX.clinic, code:code,
-          waba_id:WA_ES.waba_id, phone_number_id:WA_ES.phone_number_id })
-      });
-      const d = await r.json();
-      if(d.ok){ waMsg('Conectado: '+(d.numero||''),'ok'); waLoad(); }
-      else waMsg('Falhou: '+(d.erro||'')+' '+JSON.stringify(d.passos||d.meta||{}),'err');
-    }catch(e){ waMsg('Erro: '+(e.message||e),'err'); }
-  }, { config_id:WA_FB_CONFIG, response_type:'code',
-       override_default_response_type:true,
-       extras:{ setup:{}, featureType:'', sessionInfoVersion:'3' } });
+async function waEnviarCodigo(code){
+  try{
+    const { data:sess } = await SB.auth.getSession();
+    const r = await fetch(SB_URL+'/functions/v1/wa-signup',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+sess.session.access_token,'Content-Type':'application/json'},
+      body: JSON.stringify({ clinic_id:NX.clinic, code:code,
+        waba_id:WA_ES.waba_id, phone_number_id:WA_ES.phone_number_id })
+    });
+    const d = await r.json();
+    if (d.ok){ waMsg('Conectado: '+(d.numero||''),'ok'); waLoad(); }
+    else waMsg('Falhou: '+(d.erro||'')+' '+JSON.stringify(d.passos||d.meta||{}),'err');
+  }catch(e){ waMsg('Erro: '+(e.message||e),'err'); }
 }
 
 async function waDisconnect(){ try{ await SB.rpc('nx_wa_disconnect',{p_clinic:NX.clinic}); toast('WhatsApp desconectado'); waLoad(); }catch(e){ toast('Erro','⚠'); } }
