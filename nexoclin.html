@@ -1873,8 +1873,18 @@ function waLink(num, texto){ return 'https://wa.me/'+num+'?text='+encodeURICompo
 function qrImg(url){ return 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=8&data='+encodeURIComponent(url); }
 async function canalLoad(){
   const box=document.getElementById('canalBox'); if(!box) return;
-  const num=(((NX.clinicInfo||{}).telefone_whatsapp)||'').replace(/\D/g,'');
-  if(!num){ box.innerHTML='<div class="cl-cs">Preencha o <b>WhatsApp oficial</b> da clínica (acima) e salve o perfil para gerar os links e QR Codes.</div>'; return; }
+  // O numero sai da conexao real com a Meta, nao do campo digitado no perfil.
+  // Distribuir QR de um numero que nao esta conectado leva o paciente a um
+  // WhatsApp que nao atende — ou ao de outra pessoa.
+  let num='';
+  try{
+    const {data:wa}=await SB.rpc('nx_wa_get',{p_clinic:NX.clinic});
+    if(wa && wa.status==='conectado') num=(wa.display_number||'').replace(/\D/g,'');
+  }catch(e){}
+  if(num.length<12){
+    box.innerHTML='<p class="wa-hint">Conecte o WhatsApp da clínica no card acima para gerar os links e QR Codes de atendimento.</p>';
+    return;
+  }
   let meds=[]; try{ const {data}=await SB.rpc('nx_clinic_medicos',{p_clinic:NX.clinic}); meds=data||[]; }catch(e){}
   const clnome=((NX.clinicInfo||{}).nome)||'a clínica';
   const clinicLink=waLink(num,'Olá! Gostaria de iniciar um atendimento na '+clnome+'.');
