@@ -897,11 +897,10 @@ function clinicaView(){
         </div>
         ${persUrl?`<div class="cl-cs" style="margin-top:14px">Endereço personalizado da clínica</div><div class="cl-inp"><code>${persUrl}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div>`:`<div class="cl-cs" style="margin-top:14px">Defina um slug e salve para gerar o endereço personalizado (ex.: .../?c=dra-camila).</div>`}
       </div>
-      <div class="cl-card">
+      <div class="cl-card" id="qrCard">
         <div class="cl-ct">Link & QR de contato do paciente</div>
         <div class="cl-cs">Divulgue este QR/link — o paciente cai direto no WhatsApp oficial da clínica.</div>
-        ${link?`<div class="cl-qr"><img src="${qrURL(link,200)}" alt="QR de contato" width="180" height="180"></div>
-        <div class="cl-inp"><code>${link}</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div>`:`<div class="cl-cs">Cadastre o WhatsApp oficial acima para gerar o QR de contato.</div>`}
+        <div id="qrBox"><div class="cl-cs">Carregando...</div></div>
       </div>
       <div class="cl-card cl-wide">
         <div class="cl-ct">Convidar novo paciente</div>
@@ -1661,6 +1660,21 @@ function waRender(d,tpls){
   const st=d.status||'desconectado';
   // A pilula do topo dizia "WhatsApp conectado" fixo no HTML, com ou sem
   // numero. Numa clinica isso faz a recepcao responder horas sem nada sair.
+  // O QR de contato do paciente sai daqui, do numero conectado — nao do campo
+  // digitado no perfil. Sem conexao nao existe QR: um codigo impresso que leva
+  // a um numero que nao atende e pior do que nenhum codigo.
+  const qb=document.getElementById('qrBox');
+  if(qb){
+    const num=(d.display_number||'').replace(/\D/g,'');
+    if(st==='conectado' && num.length>=12){
+      const l='https://wa.me/'+num+'?text='+encodeURIComponent('Ola! Vim pelo NexoClin e gostaria de atendimento.');
+      qb.innerHTML='<div class="cl-qr"><img src="'+qrURL(l,200)+'" alt="QR de contato" width="180" height="180"></div>'
+        +'<div class="cl-inp"><code>'+l+'</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div>';
+    } else {
+      qb.innerHTML='<div class="cl-cs">Conecte o WhatsApp da clinica (card abaixo) para gerar o QR de contato.</div>';
+    }
+  }
+
   const pill=document.getElementById('waPill');
   if(pill){
     const ok = st==='conectado';
