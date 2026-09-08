@@ -169,6 +169,9 @@ button{font-family:inherit}
 .cl-cs{font-size:12px;color:var(--mute);margin-bottom:12px}
 .cl-profile{display:flex;gap:16px}
 .cl-foto{width:72px;height:72px;border-radius:16px;background:var(--role,var(--cyan));color:#fff;display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:26px}
+.cl-foto{overflow:hidden}
+.cl-foto img{width:100%;height:100%;object-fit:cover;display:block}
+
 .cl-field{margin-bottom:10px;display:flex;flex-direction:column}
 .cl-field label{font-size:10.5px;font-weight:700;color:var(--mute);margin-bottom:5px;text-transform:uppercase;letter-spacing:.03em}
 .cl-field input{border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14px;font-family:var(--body);outline:none;background:#fff}
@@ -863,6 +866,50 @@ function agendaAction(i,act){
 
 
 const CLINIC={nome:'Consultório Dra. Camila Ferreira',cnpj:'42.113.884/0001-20',endereco:'R. Conde de Bonfim, 255 · Tijuca',cidade:'Rio de Janeiro',estado:'RJ',whatsapp:'+55 21 99812-4477',slug:'dra-camila',foto:'CF'};
+
+// ===== Foto da clinica =====
+// Vai para o bucket 'documentos', na pasta da propria clinica: a politica de
+// RLS que ja protege os anexos das conversas serve aqui sem nenhuma mudanca.
+// Guardamos o CAMINHO, nao a URL — o bucket e privado e a tela assina na hora.
+async function clFotoUpload(input){
+  const f = input.files && input.files[0];
+  input.value = '';
+  const msg = document.getElementById('clFotoMsg');
+  const diz = (txt,cor) => { if(msg){ msg.textContent=txt; msg.style.color=cor||'var(--mute)'; } };
+  if(!f) return;
+  if(f.size > 2*1024*1024){ diz('Imagem muito grande (máx. 2 MB)','#D9403A'); return; }
+
+  diz('Enviando...');
+  try{
+    const ext = (f.name.split('.').pop()||'png').toLowerCase().slice(0,5);
+    const path = NX.clinic+'/_perfil/logo_'+Date.now()+'.'+ext;
+    const { error:upErr } = await SB.storage.from('documentos')
+      .upload(path, f, { contentType: f.type||undefined, upsert:false });
+    if(upErr) throw upErr;
+
+    const { data, error } = await SB.rpc('nx_clinic_set_foto', { p_clinic:NX.clinic, p_path:path });
+    if(error) throw error;
+    if(data && data.anterior){
+      // limpa a anterior para nao acumular arquivo orfao no bucket
+      SB.storage.from('documentos').remove([data.anterior]).catch(()=>{});
+    }
+    diz('Foto atualizada','#12996A');
+    await loadClinicInfo();
+    clFotoRender();
+  }catch(e){ diz('Erro: '+(e.message||e),'#D9403A'); }
+}
+
+// A imagem e privada: precisa de URL assinada para aparecer.
+async function clFotoRender(){
+  const el = document.getElementById('clFoto');
+  const p = (NX.clinicInfo||{}).foto_url;
+  if(!el || !p) return;
+  try{
+    const { data } = await SB.storage.from('documentos').createSignedUrl(p, 3600);
+    if(data && data.signedUrl) el.innerHTML = '<img src="'+data.signedUrl+'" alt="Logo da clínica">';
+  }catch(e){}
+}
+
 function nxCopy(t,btn){ try{navigator.clipboard&&navigator.clipboard.writeText(t);}catch(e){} if(btn){const o=btn.textContent;btn.textContent='Copiado ✓';setTimeout(()=>btn.textContent=o,1400);} }
 function cpfValido(cpf){ cpf=(cpf||'').replace(/\D/g,''); if(cpf.length!==11||/^(\d)\1{10}$/.test(cpf))return false;
   let s=0; for(let i=0;i<9;i++)s+=+cpf[i]*(10-i); let d=(s*10)%11; if(d===10)d=0; if(d!==+cpf[9])return false;
@@ -880,7 +927,7 @@ function cpfCheck(el){
 function qrURL(data,size){ return 'https://api.qrserver.com/v1/create-qr-code/?size='+size+'x'+size+'&margin=8&data='+encodeURIComponent(data); }
 function clinicaView(){
   const real=NX.real&&NX.clinicInfo;
-  if(NX.real&&NX.clinic){ setTimeout(waLoad,0); setTimeout(canalLoad,0); }
+  if(NX.real&&NX.clinic){ setTimeout(waLoad,0); setTimeout(canalLoad,0); setTimeout(clFotoRender,0); }
   const I=NX.clinicInfo||{};
   const C= real ? {nome:I.nome||'',razao:I.razao_social||'',fantasia:I.nome_fantasia||'',cnpj:I.cnpj||'',cnes:I.cnes||'',email:I.email||'',whatsapp:I.telefone_whatsapp||'',cep:I.cep||'',endereco:I.endereco||'',numero:I.numero||'',complemento:I.complemento||'',bairro:I.bairro||'',cidade:I.cidade||'',estado:I.estado||'',resp:I.responsavel_tecnico||'',respCrm:I.responsavel_crm||'',slug:I.link_slug||'',foto:(I.nome||'C').replace(/[^A-Za-zÀ-ÿ ]/g,'').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase()||'C'}
                 : {nome:CLINIC.nome,razao:'',fantasia:'',cnpj:CLINIC.cnpj,cnes:'',email:'',whatsapp:CLINIC.whatsapp,cep:'',endereco:CLINIC.endereco,numero:'',complemento:'',bairro:'',cidade:CLINIC.cidade,estado:CLINIC.estado,resp:'',respCrm:'',slug:CLINIC.slug,foto:CLINIC.foto};
@@ -893,7 +940,7 @@ function clinicaView(){
       <div class="cl-card">
         <div class="cl-ct">Perfil da clínica</div>
         <div class="cl-profile">
-          <div><div class="cl-foto">${C.foto}</div><button class="cl-copy" style="margin-top:8px;width:100%" onclick="toast('Upload de foto (em breve)','📷')">Trocar foto</button></div>
+          <div><div class="cl-foto" id="clFoto">${C.foto}</div><input type="file" id="clFotoFile" accept="image/png,image/jpeg,image/webp" hidden onchange="clFotoUpload(this)"><button class="cl-copy" style="margin-top:8px;width:100%" onclick="document.getElementById('clFotoFile').click()">Trocar foto</button><div class="cl-hint" id="clFotoMsg"></div></div>
           <div style="flex:1">
             <div class="cl-sec2">Identificação</div>
             <div class="cl-field"><label>Nome da clínica (exibido nos documentos)</label><input id="clNome" value="${C.nome}"></div>
