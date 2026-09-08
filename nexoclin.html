@@ -303,6 +303,23 @@ audio.rc-media{width:230px;max-width:100%}
 .prt-a{display:flex;gap:6px;margin-top:10px}
 
 .cl-sec2{font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#1596BE;margin:16px 0 8px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+/* ===== respiro nos cards da clinica ===== */
+.cl-ct{margin-bottom:7px;line-height:1.35}
+.cl-cs{font-size:12.5px;line-height:1.65;margin-bottom:14px}
+.cl-card{padding:20px}
+.cl-field{margin-bottom:14px}
+.cl-field label{margin-bottom:6px;line-height:1.4}
+.cl-sec2{margin:22px 0 12px}
+.cl-inp{padding:10px 12px}
+.cl-2{gap:12px}
+.wa-tpl{padding:12px 14px}
+.wa-tpl-h{margin-bottom:6px}
+.wa-tpl-b{line-height:1.6}
+.wa-tpl-d{margin-top:6px;line-height:1.5}
+
+/* mensagem de orientacao: distinta do texto comum, sem virar alerta */
+.wa-hint{font-style:italic;color:#1596BE;font-size:13px;line-height:1.65;margin:2px 0 14px}
+
 .eq-legend{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:16px}
 .eq-lg-t{font-weight:800;color:var(--navy);margin-bottom:10px}
 .eq-lg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
@@ -1671,7 +1688,7 @@ function waRender(d,tpls){
       qb.innerHTML='<div class="cl-qr"><img src="'+qrURL(l,200)+'" alt="QR de contato" width="180" height="180"></div>'
         +'<div class="cl-inp"><code>'+l+'</code><button class="cl-copy" onclick="nxCopy(this.previousElementSibling.textContent,this)">Copiar</button></div>';
     } else {
-      qb.innerHTML='<div class="cl-cs">Conecte o WhatsApp da clinica (card abaixo) para gerar o QR de contato.</div>';
+      qb.innerHTML='<p class="wa-hint">Conecte o WhatsApp da cl\u00ednica no card abaixo para gerar o QR de contato.</p>';
     }
   }
 
@@ -1685,7 +1702,7 @@ function waRender(d,tpls){
   const color=st==='conectado'?'#12996A':st==='pendente'?'#B4790B':'#8a99a0';
   const soft=st==='conectado'?'#DCF3EA':st==='pendente'?'#FFF3D6':'#EEF2F4';
   box.innerHTML=`
-    <div style="margin-bottom:12px"><span class="rc-stat" style="background:${soft};color:${color}">${st.toUpperCase()}</span>${d.connected_at?` <span style="color:var(--mute);font-size:12px">desde ${new Date(d.connected_at).toLocaleDateString('pt-BR')}</span>`:''}</div>
+    <div style="margin-bottom:16px"><span class="rc-stat" style="background:${soft};color:${color}">${st.toUpperCase()}</span>${d.connected_at?` <span style="color:var(--mute);font-size:12px">desde ${new Date(d.connected_at).toLocaleDateString('pt-BR')}</span>`:''}</div>
     ${st==='conectado'?`
       <div class="cl-2">
         <div class="cl-field"><label>N&uacute;mero</label><div class="cl-inp"><code>${d.display_number||'&mdash;'}</code></div></div>
@@ -1696,7 +1713,7 @@ function waRender(d,tpls){
         <button class="rc-b2" onclick="waDisconnect()">Desconectar</button>
       </div>`
     :`
-      <p style="color:var(--mute);font-size:13.5px;margin:0 0 12px">Conecte o WhatsApp da cl&iacute;nica. Voc&ecirc; ser&aacute; levado ao cadastro da Meta para informar o n&uacute;mero e confirmar o c&oacute;digo por SMS.</p>
+      <p class="wa-hint">Conecte o WhatsApp da cl&iacute;nica. Voc&ecirc; ser&aacute; levado ao cadastro da Meta para informar o n&uacute;mero e confirmar o c&oacute;digo por SMS.</p>
       <button class="cl-btn pri" style="margin:0;background:#25D366;border:0;width:100%;padding:13px" onclick="waConectar()">Conectar com o WhatsApp</button>`}
     <div id="waMsg" style="margin-top:12px"></div>
     <details style="margin-top:14px">
